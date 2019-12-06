@@ -37,9 +37,9 @@ class RPN(nn.Module):
         super(RPN, self).__init__()
 
         self.features = VGG16(bn=False)
-        self.conv1 = Conv2d(512, 512, 3, same_padding=True)
-        self.score_conv = Conv2d(512, len(self.anchor_scales) * 3 * 2, 1, relu=False, same_padding=False)
-        self.bbox_conv = Conv2d(512, len(self.anchor_scales) * 3 * 4, 1, relu=False, same_padding=False)
+        self.conv1 = Conv2d(512, 512, 3, same_padding=True) #3*3卷积
+        self.score_conv = Conv2d(512, len(self.anchor_scales) * 3 * 2, 1, relu=False, same_padding=False) #1*1卷积得到9*2channal
+        self.bbox_conv = Conv2d(512, len(self.anchor_scales) * 3 * 4, 1, relu=False, same_padding=False) #1*1卷积得到4*9channal
 
         # loss
         self.cross_entropy = None
@@ -59,7 +59,7 @@ class RPN(nn.Module):
         # rpn score
         rpn_cls_score = self.score_conv(rpn_conv1)
         rpn_cls_score_reshape = self.reshape_layer(rpn_cls_score, 2)
-        rpn_cls_prob = F.softmax(rpn_cls_score_reshape)
+        rpn_cls_prob = F.softmax(rpn_cls_score_reshape) #变成概率了！注意区分score和prob
         rpn_cls_prob_reshape = self.reshape_layer(rpn_cls_prob, len(self.anchor_scales)*3*2)
 
         # rpn boxes
@@ -67,7 +67,7 @@ class RPN(nn.Module):
 
         # proposal layer
         cfg_key = 'TRAIN' if self.training else 'TEST'
-        rois = self.proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info,
+        rois = self.proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, #此处的rois是anchor按照bbox_pred进行了转换的后的按照fg概率大小从高到低返回的top_k
                                    cfg_key, self._feat_stride, self.anchor_scales)
 
         # generating training labels and build the rpn loss

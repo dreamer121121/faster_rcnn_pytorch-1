@@ -46,9 +46,9 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     # Algorithm:
     #
     # for each (H, W) location i
-    #   generate A anchor boxes centered on cell i
-    #   apply predicted bbox deltas at cell i to each of the A anchors
-    # clip predicted boxes to image
+    #   generate A anchor boxes centered on cell i #在位置i处生成9个anchor
+    #   apply predicted bbox deltas at cell i to each of the A anchors 将以i位置为中心的9个anchor逐一进行回归操作
+    # clip predicted boxes to image #此处的clip不要与最初的RCNN混淆，此处只是对proposal进行裁剪使其不超出图片的范围，并不是与之前的RCNN一样将proposal从图片中裁剪下来并resize成CNN输入的大小！
     # remove predicted boxes with either height or width < threshold
     # sort all (proposal, score) pairs by score from highest to lowest
     # take top pre_nms_topN proposals before NMS
@@ -58,7 +58,7 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     #layer_params = yaml.load(self.param_str_)
 
     """
-    _anchors = generate_anchors(scales=np.array(anchor_scales))
+    _anchors = generate_anchors(scales=np.array(anchor_scales)) #生成9个anchor
     _num_anchors = _anchors.shape[0]
     # rpn_cls_prob_reshape = np.transpose(rpn_cls_prob_reshape,[0,3,1,2]) #-> (1 , 2xA, H , W)
     # rpn_bbox_pred = np.transpose(rpn_bbox_pred,[0,3,1,2])              # -> (1 , Ax4, H , W)
@@ -83,14 +83,14 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     # im_info = bottom[2].data[0, :]
 
     if DEBUG:
-        print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
-        print 'scale: {}'.format(im_info[2])
+        print ('im_size: ({}, {})'.format(im_info[0], im_info[1]))
+        print ('scale: {}'.format(im_info[2]))
 
     # 1. Generate proposals from bbox deltas and shifted anchors
     height, width = scores.shape[-2:]
 
     if DEBUG:
-        print 'score map size: {}'.format(scores.shape)
+        print ('score map size: {}'.format(scores.shape))
 
     # Enumerate all shifts
     shift_x = np.arange(0, width) * _feat_stride

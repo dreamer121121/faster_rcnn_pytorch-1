@@ -51,13 +51,13 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     _num_anchors = _anchors.shape[0]
 
     if DEBUG:
-        print 'anchors:'
-        print _anchors
-        print 'anchor shapes:'
-        print np.hstack((
+        print ('anchors:')
+        print (_anchors)
+        print ('anchor shapes:')
+        print (np.hstack((
             _anchors[:, 2::4] - _anchors[:, 0::4],
             _anchors[:, 3::4] - _anchors[:, 1::4],
-        ))
+        )))
         _counts = cfg.EPS
         _sums = np.zeros((1, 4))
         _squared_sums = np.zeros((1, 4))
@@ -88,13 +88,13 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     height, width = rpn_cls_score.shape[2:4]
 
     if DEBUG:
-        print 'AnchorTargetLayer: height', height, 'width', width
-        print ''
-        print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
-        print 'scale: {}'.format(im_info[2])
-        print 'height, width: ({}, {})'.format(height, width)
-        print 'rpn: gt_boxes.shape', gt_boxes.shape
-        print 'rpn: gt_boxes', gt_boxes
+        print ('AnchorTargetLayer: height', height, 'width', width)
+        print ('')
+        print ('im_size: ({}, {})'.format(im_info[0], im_info[1]))
+        print ('scale: {}'.format(im_info[2]))
+        print ('height, width: ({}, {})'.format(height, width))
+        print ('rpn: gt_boxes.shape', gt_boxes.shape)
+        print ('rpn: gt_boxes', gt_boxes)
 
     # 1. Generate proposals from bbox deltas and shifted anchors
     shift_x = np.arange(0, width) * _feat_stride
@@ -123,13 +123,13 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     )[0]
 
     if DEBUG:
-        print 'total_anchors', total_anchors
-        print 'inds_inside', len(inds_inside)
+        print ('total_anchors', total_anchors)
+        print ('inds_inside', len(inds_inside))
 
     # keep only inside anchors
     anchors = all_anchors[inds_inside, :]
     if DEBUG:
-        print 'anchors.shape', anchors.shape
+        print ('anchors.shape', anchors.shape)
 
     # label: 1 is positive, 0 is negative, -1 is dont care
     # (A)
