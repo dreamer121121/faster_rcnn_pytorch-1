@@ -189,7 +189,7 @@ class FasterRCNN(nn.Module):
             self.classes = classes
             self.n_classes = len(classes)
 
-        self.rpn = RPN()
+        self.rpn = RPN() #
         self.roi_pool = RoIPool(7, 7, 1.0/16)
         self.fc6 = FC(512 * 7 * 7, 4096)
         self.fc7 = FC(4096, 4096)
@@ -212,7 +212,7 @@ class FasterRCNN(nn.Module):
         return self.cross_entropy + self.loss_box * 10
 
     def forward(self, im_data, im_info, gt_boxes=None, gt_ishard=None, dontcare_areas=None):
-        features, rois = self.rpn(im_data, im_info, gt_boxes, gt_ishard, dontcare_areas)
+        features, rois = self.rpn(im_data, im_info, gt_boxes, gt_ishard, dontcare_areas) #调用rpn的forward得到
 
         if self.training:
             roi_data = self.proposal_target_layer(rois, gt_boxes, gt_ishard, dontcare_areas, self.n_classes)
