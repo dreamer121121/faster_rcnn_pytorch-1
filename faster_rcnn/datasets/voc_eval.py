@@ -6,7 +6,7 @@
 
 import xml.etree.ElementTree as ET
 import os
-import cPickle
+import pickle as cPickle
 import numpy as np
 import pdb
 def parse_rec(filename):
@@ -106,17 +106,18 @@ def voc_eval(detpath,
         # load annots
         recs = {}
         for i, imagename in enumerate(imagenames):
+            print("annopath.format(imagename)",annopath.format(imagename))
             recs[imagename] = parse_rec(annopath.format(imagename))
             if i % 100 == 0:
-                print 'Reading annotation for {:d}/{:d}'.format(
-                    i + 1, len(imagenames))
+                print ('Reading annotation for {:d}/{:d}'.format(
+                    i + 1, len(imagenames)))
         # save
-        print 'Saving cached annotations to {:s}'.format(cachefile)
-        with open(cachefile, 'w') as f:
+        print ('Saving cached annotations to {:s}'.format(cachefile))
+        with open(cachefile, 'wb') as f:
             cPickle.dump(recs, f)
     else:
         # load
-        with open(cachefile, 'r') as f:
+        with open(cachefile, 'rb') as f:
             recs = cPickle.load(f)
 
     # extract gt objects for this class

@@ -10,7 +10,7 @@ import numpy as np
 import numpy.random as npr
 import pdb
 
-from ..utils.cython_bbox import bbox_overlaps, bbox_intersections
+# from ..utils.cython_bbox import bbox_overlaps, bbox_intersections
 
 # TODO: make fast_rcnn irrelevant
 # >>>> obsolete, because it depends on sth outside of this project
@@ -83,14 +83,14 @@ def proposal_target_layer(rpn_rois, gt_boxes, gt_ishard, dontcare_areas, _num_cl
     if DEBUG:
         if _count == 1:
             _fg_num, _bg_num = 0, 0
-        print 'num fg: {}'.format((labels > 0).sum())
-        print 'num bg: {}'.format((labels == 0).sum())
+        print ('num fg: {}'.format((labels > 0).sum()))
+        print ('num bg: {}'.format((labels == 0).sum()))
         _count += 1
         _fg_num += (labels > 0).sum()
         _bg_num += (labels == 0).sum()
-        print 'num fg avg: {}'.format(_fg_num / _count)
-        print 'num bg avg: {}'.format(_bg_num / _count)
-        print 'ratio: {:.3f}'.format(float(_fg_num) / float(_bg_num))
+        print ('num fg avg: {}'.format(_fg_num / _count))
+        print ('num bg avg: {}'.format(_bg_num / _count))
+        print ('ratio: {:.3f}'.format(float(_fg_num) / float(_bg_num)))
 
     rois = rois.reshape(-1, 5)
     labels = labels.reshape(-1, 1)
@@ -110,9 +110,10 @@ def _sample_rois(all_rois, gt_boxes, gt_ishard, dontcare_areas, fg_rois_per_imag
     overlaps = bbox_overlaps(
         np.ascontiguousarray(all_rois[:, 1:5], dtype=np.float),
         np.ascontiguousarray(gt_boxes[:, :4], dtype=np.float))
-    gt_assignment = overlaps.argmax(axis=1)  # R
+    #计算了每一个region_proposal与所有的gt的IOU
+    gt_assignment = overlaps.argmax(axis=1)  # R 返回最大的overlap的索引
     max_overlaps = overlaps.max(axis=1)  # R
-    labels = gt_boxes[gt_assignment, 4]
+    labels = gt_boxes[gt_assignment, 4] #将最大的overlap的GT的label标记给当前的region_proposal
 
     # preclude hard samples
     ignore_inds = np.empty(shape=(0), dtype=int)
@@ -130,10 +131,10 @@ def _sample_rois(all_rois, gt_boxes, gt_ishard, dontcare_areas, fg_rois_per_imag
                                     np.where(hard_max_overlaps >= cfg.TRAIN.FG_THRESH)[0])
             if DEBUG:
                 if ignore_inds.size > 1:
-                    print 'num hard: {:d}:'.format(ignore_inds.size)
-                    print 'hard box:', gt_hardboxes
-                    print 'rois: '
-                    print all_rois[ignore_inds]
+                    print ('num hard: {:d}:'.format(ignore_inds.size))
+                    print ('hard box:', gt_hardboxes)
+                    print ('rois: ')
+                    print (all_rois[ignore_inds])
 
     # preclude dontcare areas
     if dontcare_areas is not None and dontcare_areas.shape[0] > 0:

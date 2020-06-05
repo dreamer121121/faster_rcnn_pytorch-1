@@ -5,18 +5,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from utils.timer import Timer
-from utils.blob import im_list_to_blob
-from fast_rcnn.nms_wrapper import nms
-from rpn_msr.proposal_layer import proposal_layer as proposal_layer_py
-from rpn_msr.anchor_target_layer import anchor_target_layer as anchor_target_layer_py
-from rpn_msr.proposal_target_layer import proposal_target_layer as proposal_target_layer_py
-from fast_rcnn.bbox_transform import bbox_transform_inv, clip_boxes
+from .utils.timer import Timer
+from .utils.blob import im_list_to_blob
+from .fast_rcnn.nms_wrapper import nms
+from .rpn_msr.proposal_layer import proposal_layer as proposal_layer_py
+from .rpn_msr.anchor_target_layer import anchor_target_layer as anchor_target_layer_py
+from .rpn_msr.proposal_target_layer import proposal_target_layer as proposal_target_layer_py
+from .fast_rcnn.bbox_transform import bbox_transform_inv, clip_boxes
 
 import network
 from network import Conv2d, FC
-# from roi_pooling.modules.roi_pool_py import RoIPool
-from roi_pooling.modules.roi_pool import RoIPool
+from roi_pooling.modules.roi_pool_py import RoIPool
+# from roi_pooling.modules.roi_pool import RoIPool
 from vgg16 import VGG16
 
 
@@ -37,7 +37,7 @@ class RPN(nn.Module):
         super(RPN, self).__init__()
 
         self.features = VGG16(bn=False)
-        self.conv1 = Conv2d(512, 512, 3, same_padding=True) #3*3卷积
+        self.conv1 = Conv2d(512, 512, 3, same_padding=True) #3*3卷积提前进行融合
         self.score_conv = Conv2d(512, len(self.anchor_scales) * 3 * 2, 1, relu=False, same_padding=False) #1*1卷积得到9*2channal
         self.bbox_conv = Conv2d(512, len(self.anchor_scales) * 3 * 4, 1, relu=False, same_padding=False) #1*1卷积得到4*9channal
 
@@ -50,7 +50,7 @@ class RPN(nn.Module):
         return self.cross_entropy + self.loss_box * 10
 
     def forward(self, im_data, im_info, gt_boxes=None, gt_ishard=None, dontcare_areas=None):
-        im_data = network.np_to_variable(im_data, is_cuda=True)
+        im_data = network.np_to_variable(im_data, is_cuda=False)
         im_data = im_data.permute(0, 3, 1, 2)
         features = self.features(im_data)
 
@@ -69,10 +69,13 @@ class RPN(nn.Module):
         cfg_key = 'TRAIN' if self.training else 'TEST'
         rois = self.proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, #此处的rois是anchor按照bbox_pred进行了转换的后的按照fg概率大小从高到低返回的top_k
                                    cfg_key, self._feat_stride, self.anchor_scales)
+        # print("region proposal",len(rois)) #此处返回300+个region proposals
+
 
         # generating training labels and build the rpn loss
         if self.training:
             assert gt_boxes is not None
+            # print("gt_boxes",gt_boxes) #此处的gt_boxes仍使用绝对坐标
             rpn_data = self.anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas,
                                                 im_info, self._feat_stride, self.anchor_scales)
             self.cross_entropy, self.loss_box = self.build_loss(rpn_cls_score_reshape, rpn_bbox_pred, rpn_data)
@@ -80,11 +83,13 @@ class RPN(nn.Module):
         return features, rois
 
     def build_loss(self, rpn_cls_score_reshape, rpn_bbox_pred, rpn_data):
-        # classification loss
+
+        # classification loss 计算RPN网络的分类损失
         rpn_cls_score = rpn_cls_score_reshape.permute(0, 2, 3, 1).contiguous().view(-1, 2)
         rpn_label = rpn_data[0].view(-1)
 
-        rpn_keep = Variable(rpn_label.data.ne(-1).nonzero().squeeze()).cuda()
+        #排除label中标签为-1的样本不参加训练。
+        rpn_keep = Variable(rpn_label.data.ne(-1).nonzero().squeeze()).cuda() #torch.ne()，tensor[1,-1,1]-->[1,0,1],再配合nonzero()返回不为0的索引位置（去除为-1的标签返回0-1索引)
         rpn_cls_score = torch.index_select(rpn_cls_score, 0, rpn_keep)
         rpn_label = torch.index_select(rpn_label, 0, rpn_keep)
 
@@ -92,8 +97,10 @@ class RPN(nn.Module):
 
         rpn_cross_entropy = F.cross_entropy(rpn_cls_score, rpn_label)
 
-        # box loss
+        # box loss 计算anchor的定位损失。
         rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights = rpn_data[1:]
+        #rpn_bbox_inside_weights，将前景的anchor设置为1，背景anchor和dont care area设置为0，
+        #在计算anchor的回归损失时，只计算前景的回归损失。
         rpn_bbox_targets = torch.mul(rpn_bbox_targets, rpn_bbox_inside_weights)
         rpn_bbox_pred = torch.mul(rpn_bbox_pred, rpn_bbox_inside_weights)
 
@@ -120,7 +127,7 @@ class RPN(nn.Module):
         rpn_cls_prob_reshape = rpn_cls_prob_reshape.data.cpu().numpy()
         rpn_bbox_pred = rpn_bbox_pred.data.cpu().numpy()
         x = proposal_layer_py(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_stride, anchor_scales)
-        x = network.np_to_variable(x, is_cuda=True)
+        x = network.np_to_variable(x, is_cuda=False)
         return x.view(-1, 5)
 
     @staticmethod
@@ -147,10 +154,10 @@ class RPN(nn.Module):
         rpn_labels, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights = \
             anchor_target_layer_py(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_info, _feat_stride, anchor_scales)
 
-        rpn_labels = network.np_to_variable(rpn_labels, is_cuda=True, dtype=torch.LongTensor)
-        rpn_bbox_targets = network.np_to_variable(rpn_bbox_targets, is_cuda=True)
-        rpn_bbox_inside_weights = network.np_to_variable(rpn_bbox_inside_weights, is_cuda=True)
-        rpn_bbox_outside_weights = network.np_to_variable(rpn_bbox_outside_weights, is_cuda=True)
+        rpn_labels = network.np_to_variable(rpn_labels, is_cuda=False, dtype=torch.LongTensor)
+        rpn_bbox_targets = network.np_to_variable(rpn_bbox_targets, is_cuda=False)
+        rpn_bbox_inside_weights = network.np_to_variable(rpn_bbox_inside_weights, is_cuda=False)
+        rpn_bbox_outside_weights = network.np_to_variable(rpn_bbox_outside_weights, is_cuda=False)
 
         return rpn_labels, rpn_bbox_targets, rpn_bbox_inside_weights, rpn_bbox_outside_weights
 
@@ -213,6 +220,7 @@ class FasterRCNN(nn.Module):
 
     def forward(self, im_data, im_info, gt_boxes=None, gt_ishard=None, dontcare_areas=None):
         features, rois = self.rpn(im_data, im_info, gt_boxes, gt_ishard, dontcare_areas) #调用rpn的forward得到
+        # print("rois:",rois) #返回region proposal
 
         if self.training:
             roi_data = self.proposal_target_layer(rois, gt_boxes, gt_ishard, dontcare_areas, self.n_classes)

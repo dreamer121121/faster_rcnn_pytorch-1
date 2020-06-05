@@ -12,12 +12,12 @@ __sets = {}
 import numpy as np
 
 from .pascal_voc import pascal_voc
-from .imagenet3d import imagenet3d
-from .kitti import kitti
-from .kitti_tracking import kitti_tracking
-from .nthu import nthu
-from .coco import coco
-from .kittivoc import kittivoc
+# from .imagenet3d import imagenet3d
+# from .kitti import kitti
+# from .kitti_tracking import kitti_tracking
+# from .nthu import nthu
+# from .coco import coco
+# from .kittivoc import kittivoc
 
 
 def _selective_search_IJCV_top_k(split, year, top_k):
@@ -71,7 +71,8 @@ for split in ['71', '370']:
 
 def get_imdb(name):
     """Get an imdb (image database) by name."""
-    if not __sets.has_key(name):
+    if name not in __sets.keys():
+    # if not __sets.has_key(name):
         # print (list_imdbs())
         raise KeyError('Unknown dataset: {}'.format(name))
     return __sets[name]()

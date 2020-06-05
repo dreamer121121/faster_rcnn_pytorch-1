@@ -7,17 +7,20 @@ import numpy as np
 class RoIPool(nn.Module):
     def __init__(self, pooled_height, pooled_width, spatial_scale):
         super(RoIPool, self).__init__()
-        self.pooled_width = int(pooled_width)
-        self.pooled_height = int(pooled_height)
-        self.spatial_scale = float(spatial_scale)
+        self.pooled_width = int(pooled_width) #池化后的宽度
+        self.pooled_height = int(pooled_height) #池化后的高度
+        self.spatial_scale = float(spatial_scale) #从原图映射到当前的featuremap变为原来的1/16
 
     def forward(self, features, rois):
+        #ROIS：RPN网络提出的region proposal
         batch_size, num_channels, data_height, data_width = features.size()
         num_rois = rois.size()[0]
-        outputs = Variable(torch.zeros(num_rois, num_channels, self.pooled_height, self.pooled_width)).cuda()
+        # outputs = Variable(torch.zeros(num_rois, num_channels, self.pooled_height, self.pooled_width)).cuda()
+        outputs = Variable(torch.zeros(num_rois, num_channels, self.pooled_height, self.pooled_width))
+        #构造出ROIPooling层的输出矩阵，先以零矩阵表示，num_channels没有改变。
 
         for roi_ind, roi in enumerate(rois):
-            batch_ind = int(roi[0].data[0])
+            batch_ind = int(roi[0].data)
             roi_start_w, roi_start_h, roi_end_w, roi_end_h = np.round(
                 roi[1:].data.cpu().numpy() * self.spatial_scale).astype(int)
             roi_width = max(roi_end_w - roi_start_w + 1, 1)
@@ -42,7 +45,7 @@ class RoIPool(nn.Module):
                     else:
                         data = features[batch_ind]
                         outputs[roi_ind, :, ph, pw] = torch.max(
-                            torch.max(data[:, hstart:hend, wstart:wend], 1)[0], 2)[0].view(-1)
+                            torch.max(data[:, hstart:hend, wstart:wend], 1)[0], 1)[0].view(-1)
 
         return outputs
 

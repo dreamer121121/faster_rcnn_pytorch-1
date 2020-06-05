@@ -1,7 +1,7 @@
 import os
 import torch
 import cv2
-import cPickle
+import pickle
 import numpy as np
 
 from faster_rcnn import network
@@ -16,10 +16,10 @@ from faster_rcnn.fast_rcnn.config import cfg, cfg_from_file, get_output_dir
 
 # hyper-parameters
 # ------------
-imdb_name = 'voc_2007_test'
+imdb_name = 'voc_2012_test'
 cfg_file = 'experiments/cfgs/faster_rcnn_end2end.yml'
-# trained_model = '/media/longc/Data/models/VGGnet_fast_rcnn_iter_70000.h5'
-trained_model = 'models/saved_model3/faster_rcnn_90000.h5'
+trained_model = './models/saved_model3/VGGnet_fast_rcnn_iter_70000.h5'
+# trained_model = 'models/saved_model3/faster_rcnn_90000.h5'
 
 rand_seed = 1024
 
@@ -65,14 +65,14 @@ def im_detect(net, image):
         [[im_data.shape[1], im_data.shape[2], im_scales[0]]],
         dtype=np.float32)
 
-    cls_prob, bbox_pred, rois = net(im_data, im_info)
+    cls_prob, bbox_pred, rois = net(im_data, im_info) #进行预测
     scores = cls_prob.data.cpu().numpy()
     boxes = rois.data.cpu().numpy()[:, 1:5] / im_info[0][2]
 
-    if cfg.TEST.BBOX_REG:
+    if cfg.TEST.BBOX_REG: #进行边框回归
         # Apply bounding-box regression deltas
         box_deltas = bbox_pred.data.cpu().numpy()
-        pred_boxes = bbox_transform_inv(boxes, box_deltas)
+        pred_boxes = bbox_transform_inv(boxes, box_deltas) #将region进行边框回归得到最终的bbox
         pred_boxes = clip_boxes(pred_boxes, image.shape)
     else:
         # Simply repeat the boxes, once for each class
@@ -84,11 +84,12 @@ def im_detect(net, image):
 def test_net(name, net, imdb, max_per_image=300, thresh=0.05, vis=False):
     """Test a Fast R-CNN network on an image database."""
     num_images = len(imdb.image_index)
+    print("num_images:",num_images)
     # all detections are collected into:
     #    all_boxes[cls][image] = N x 5 array of detections in
     #    (x1, y1, x2, y2, score)
-    all_boxes = [[[] for _ in xrange(num_images)]
-                 for _ in xrange(imdb.num_classes)]
+    all_boxes = [[[] for _ in range(num_images)]
+                 for _ in range(imdb.num_classes)]
 
     output_dir = get_output_dir(imdb, name)
 
@@ -97,10 +98,10 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, vis=False):
     det_file = os.path.join(output_dir, 'detections.pkl')
 
     for i in range(num_images):
-
+        #一张图片一张图片进行处理
         im = cv2.imread(imdb.image_path_at(i))
         _t['im_detect'].tic()
-        scores, boxes = im_detect(net, im)
+        scores, boxes = im_detect(net, im) #对一张图片进行检测，返回bbox和每一个bbox的评分
         detect_time = _t['im_detect'].toc(average=False)
 
         _t['misc'].tic()
@@ -109,7 +110,7 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, vis=False):
             im2show = np.copy(im)
 
         # skip j = 0, because it's the background class
-        for j in xrange(1, imdb.num_classes):
+        for j in range(1, imdb.num_classes):#一个类别一个类别进行处理
             inds = np.where(scores[:, j] > thresh)[0]
             cls_scores = scores[inds, j]
             cls_boxes = boxes[inds, j * 4:(j + 1) * 4]
@@ -124,39 +125,40 @@ def test_net(name, net, imdb, max_per_image=300, thresh=0.05, vis=False):
         # Limit to max_per_image detections *over all classes*
         if max_per_image > 0:
             image_scores = np.hstack([all_boxes[j][i][:, -1]
-                                      for j in xrange(1, imdb.num_classes)])
+                                      for j in range(1, imdb.num_classes)])
             if len(image_scores) > max_per_image:
                 image_thresh = np.sort(image_scores)[-max_per_image]
-                for j in xrange(1, imdb.num_classes):
+                for j in range(1, imdb.num_classes):
                     keep = np.where(all_boxes[j][i][:, -1] >= image_thresh)[0]
                     all_boxes[j][i] = all_boxes[j][i][keep, :]
         nms_time = _t['misc'].toc(average=False)
 
-        print 'im_detect: {:d}/{:d} {:.3f}s {:.3f}s' \
-            .format(i + 1, num_images, detect_time, nms_time)
+        print ('im_detect: {:d}/{:d} {:.3f}s {:.3f}s' \
+            .format(i + 1, num_images, detect_time, nms_time))
 
         if vis:
             cv2.imshow('test', im2show)
             cv2.waitKey(1)
 
     with open(det_file, 'wb') as f:
-        cPickle.dump(all_boxes, f, cPickle.HIGHEST_PROTOCOL)
+        pickle.dump(all_boxes, f, pickle.HIGHEST_PROTOCOL)
 
-    print 'Evaluating detections'
+    print ('=====Evaluating detections=====') #评估检测结果，计算MAP。
     imdb.evaluate_detections(all_boxes, output_dir)
 
 
 if __name__ == '__main__':
     # load data
-    imdb = get_imdb(imdb_name)
+    imdb = get_imdb(imdb_name) #返回一个pascal_voc对象
     imdb.competition_mode(on=True)
+    print("load data finished!")
 
     # load net
     net = FasterRCNN(classes=imdb.classes, debug=False)
-    network.load_net(trained_model, net)
+    network.load_net(trained_model, net) #加载训练好的模型。
     print('load model successfully!')
 
-    net.cuda()
+    # net.cuda()
     net.eval()
 
     # evaluation

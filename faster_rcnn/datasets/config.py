@@ -148,7 +148,7 @@ __C.TRAIN.RPN_NEGATIVE_OVERLAP = 0.3
 # If an anchor statisfied by positive and negative conditions set to negative
 __C.TRAIN.RPN_CLOBBER_POSITIVES = False
 # Max number of foreground examples
-__C.TRAIN.RPN_CLOBBER_POSITIVES = 0.5
+__C.TRAIN.RPN_FG_FRACTION = 0.5
 # Total number of examples
 __C.TRAIN.RPN_BATCHSIZE = 256
 # NMS threshold used on RPN proposals
@@ -248,7 +248,7 @@ __C.EXP_DIR = 'default'
 __C.LOG_DIR = 'default'
 
 # Use GPU implementation of non-maximum suppression
-__C.USE_GPU_NMS = False
+__C.USE_GPU_NMS = True
 
 # Default GPU device id
 __C.GPU_ID = 0
@@ -289,10 +289,9 @@ def _merge_a_into_b(a, b):
     if type(a) is not edict:
         return
 
-    for k, v in a.items():
+    for k, v in a.iteritems():
         # a must specify keys that are in b
-        if k not in b.keys():
-        # if not b.has_key(k):
+        if not b.has_key(k):
             raise KeyError('{} is not a valid config key'.format(k))
 
         # the types must match, too

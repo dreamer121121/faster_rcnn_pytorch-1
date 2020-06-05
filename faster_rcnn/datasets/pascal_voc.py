@@ -12,27 +12,27 @@ import os
 import numpy as np
 import scipy.sparse
 import subprocess
-import cPickle
+import _pickle as cPickle
 import math
 import glob
 import uuid
 import scipy.io as sio
 import xml.etree.ElementTree as ET
 
-from .imdb import imdb
-from .imdb import ROOT_DIR
+from imdb import imdb
+from imdb import ROOT_DIR
 import ds_utils
-from .voc_eval import voc_eval
+from voc_eval import voc_eval
 
 # TODO: make fast_rcnn irrelevant
 # >>>> obsolete, because it depends on sth outside of this project
-from ..fast_rcnn.config import cfg
+from config import cfg
 
 
 # <<<< obsolete
 
 
-class pascal_voc(imdb):
+class pascal_voc(imdb): #pascal_voc继承自imdb
     def __init__(self, image_set, year, devkit_path=None):
         imdb.__init__(self, 'voc_' + year + '_' + image_set)
         self._year = year
@@ -46,7 +46,7 @@ class pascal_voc(imdb):
                          'cow', 'diningtable', 'dog', 'horse',
                          'motorbike', 'person', 'pottedplant',
                          'sheep', 'sofa', 'train', 'tvmonitor')
-        self._class_to_ind = dict(zip(self.classes, xrange(self.num_classes)))
+        self._class_to_ind = dict(zip(self.classes, range(self.num_classes)))
         self._image_ext = '.jpg'
         self._image_index = self._load_image_set_index()
         # Default to roidb handler
@@ -90,6 +90,7 @@ class pascal_voc(imdb):
         """
         # Example path to image set file:
         # self._devkit_path + /VOCdevkit2007/VOC2007/ImageSets/Main/val.txt
+        #文件的位置
         image_set_file = os.path.join(self._data_path, 'ImageSets', 'Main',
                                       self._image_set + '.txt')
         assert os.path.exists(image_set_file), \
@@ -114,44 +115,44 @@ class pascal_voc(imdb):
         if os.path.exists(cache_file):
             with open(cache_file, 'rb') as fid:
                 roidb = cPickle.load(fid)
-            print '{} gt roidb loaded from {}'.format(self.name, cache_file)
+            print('{} gt roidb loaded from {}'.format(self.name, cache_file))
             return roidb
 
         gt_roidb = [self._load_pascal_annotation(index)
                     for index in self.image_index]
         with open(cache_file, 'wb') as fid:
-            cPickle.dump(gt_roidb, fid, cPickle.HIGHEST_PROTOCOL)
-        print 'wrote gt roidb to {}'.format(cache_file)
+            cPickle.dump(gt_roidb, fid)
+        print('wrote gt roidb to {}'.format(cache_file))
 
         return gt_roidb
 
-    def selective_search_roidb(self):
-        """
-        Return the database of selective search regions of interest.
-        Ground-truth ROIs are also included.
-
-        This function loads/saves from/to a cache file to speed up future calls.
-        """
-        cache_file = os.path.join(self.cache_path,
-                                  self.name + '_selective_search_roidb.pkl')
-
-        if os.path.exists(cache_file):
-            with open(cache_file, 'rb') as fid:
-                roidb = cPickle.load(fid)
-            print '{} ss roidb loaded from {}'.format(self.name, cache_file)
-            return roidb
-
-        if int(self._year) == 2007 or self._image_set != 'test':
-            gt_roidb = self.gt_roidb()
-            ss_roidb = self._load_selective_search_roidb(gt_roidb)
-            roidb = imdb.merge_roidbs(gt_roidb, ss_roidb)
-        else:
-            roidb = self._load_selective_search_roidb(None)
-        with open(cache_file, 'wb') as fid:
-            cPickle.dump(roidb, fid, cPickle.HIGHEST_PROTOCOL)
-        print 'wrote ss roidb to {}'.format(cache_file)
-
-        return roidb
+    # def selective_search_roidb(self):
+    #     """
+    #     Return the database of selective search regions of interest.
+    #     Ground-truth ROIs are also included.
+    #
+    #     This function loads/saves from/to a cache file to speed up future calls.
+    #     """
+    #     cache_file = os.path.join(self.cache_path,
+    #                               self.name + '_selective_search_roidb.pkl')
+    #
+    #     if os.path.exists(cache_file):
+    #         with open(cache_file, 'rb') as fid:
+    #             roidb = cPickle.load(fid)
+    #         print ('{} ss roidb loaded from {}'.format(self.name, cache_file))
+    #         return roidb
+    #
+    #     if int(self._year) == 2007 or self._image_set != 'test':
+    #         gt_roidb = self.gt_roidb()
+    #         ss_roidb = self._load_selective_search_roidb(gt_roidb) #使用Selective search算法得到的rois,在faster-rcnn中已经不再使用此种算法了！
+    #         roidb = imdb.merge_roidbs(gt_roidb, ss_roidb)
+    #     else:
+    #         roidb = self._load_selective_search_roidb(None)
+    #     with open(cache_file, 'wb') as fid:
+    #         cPickle.dump(roidb, fid, cPickle.HIGHEST_PROTOCOL)
+    #     print ('wrote ss roidb to {}'.format(cache_file))
+    #
+    #     return roidb
 
     def rpn_roidb(self):
         if int(self._year) == 2007 or self._image_set != 'test':
@@ -165,7 +166,7 @@ class pascal_voc(imdb):
 
     def _load_rpn_roidb(self, gt_roidb):
         filename = self.config['rpn_file']
-        print 'loading {}'.format(filename)
+        print ('loading {}'.format(filename))
         assert os.path.exists(filename), \
             'rpn data not found at: {}'.format(filename)
         with open(filename, 'rb') as f:
@@ -181,7 +182,7 @@ class pascal_voc(imdb):
         raw_data = sio.loadmat(filename)['boxes'].ravel()
 
         box_list = []
-        for i in xrange(raw_data.shape[0]):
+        for i in range(raw_data.shape[0]):
             boxes = raw_data[i][:, (1, 0, 3, 2)] - 1
             keep = ds_utils.unique_boxes(boxes)
             boxes = boxes[keep, :]
@@ -211,6 +212,9 @@ class pascal_voc(imdb):
 
         boxes = np.zeros((num_objs, 4), dtype=np.uint16)
         gt_classes = np.zeros((num_objs), dtype=np.int32)
+
+        #天坑！注意观察此处的overlaps实际是指当前图片中的目标的类别矩阵。因此其形状为
+        #[目标的数量，类别数]
         overlaps = np.zeros((num_objs, self.num_classes), dtype=np.float32)
         # "Seg" area for pascal is just the box area
         seg_areas = np.zeros((num_objs), dtype=np.float32)
@@ -235,7 +239,7 @@ class pascal_voc(imdb):
             overlaps[ix, cls] = 1.0
             seg_areas[ix] = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-        overlaps = scipy.sparse.csr_matrix(overlaps)
+        overlaps = scipy.sparse.csr_matrix(overlaps) #使用稀疏矩阵来存储目标的类别
 
         return {'boxes': boxes,
                 'gt_classes': gt_classes,
@@ -262,7 +266,7 @@ class pascal_voc(imdb):
         for cls_ind, cls in enumerate(self.classes):
             if cls == '__background__':
                 continue
-            print 'Writing {} VOC results file'.format(cls)
+            print ('Writing {} VOC results file'.format(cls))
             filename = self._get_voc_results_file_template().format(cls)
             with open(filename, 'wt') as f:
                 for im_ind, index in enumerate(self.image_index):
@@ -270,32 +274,29 @@ class pascal_voc(imdb):
                     if dets == []:
                         continue
                     # the VOCdevkit expects 1-based indices
-                    for k in xrange(dets.shape[0]):
+                    for k in range(dets.shape[0]):
                         f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
                                 format(index, dets[k, -1],
                                        dets[k, 0] + 1, dets[k, 1] + 1,
                                        dets[k, 2] + 1, dets[k, 3] + 1))
 
     def _do_python_eval(self, output_dir='output'):
-        annopath = os.path.join(
-            self._devkit_path,
-            'VOC' + self._year,
-            'Annotations',
-            '{:s}.xml')
+        annopath = r'C:\Users\dreamer\Desktop\repositories\Object_Detection\faster_rcnn_pytorch_annotation\data\VOCdevkit2012\VOC2012\Annotations\{:s}.xml'
         imagesetfile = os.path.join(
             self._devkit_path,
             'VOC' + self._year,
             'ImageSets',
             'Main',
             self._image_set + '.txt')
+        print("imagesetfile：",imagesetfile)
         cachedir = os.path.join(self._devkit_path, 'annotations_cache')
         aps = []
         # The PASCAL VOC metric changed in 2010
         use_07_metric = True if int(self._year) < 2010 else False
-        print 'VOC07 metric? ' + ('Yes' if use_07_metric else 'No')
+        print ('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
         if not os.path.isdir(output_dir):
             os.mkdir(output_dir)
-        for i, cls in enumerate(self._classes):
+        for i, cls in enumerate(self._classes): #一类一类进行计算。
             if cls == '__background__':
                 continue
             filename = self._get_voc_results_file_template().format(cls)
@@ -304,7 +305,7 @@ class pascal_voc(imdb):
                 use_07_metric=use_07_metric)
             aps += [ap]
             print('AP for {} = {:.4f}'.format(cls, ap))
-            with open(os.path.join(output_dir, cls + '_pr.pkl'), 'w') as f:
+            with open(os.path.join(output_dir, cls + '_pr.pkl'), 'wb') as f:
                 cPickle.dump({'rec': rec, 'prec': prec, 'ap': ap}, f)
         print('Mean AP = {:.4f}'.format(np.mean(aps)))
         print('~~~~~~~~')
@@ -322,9 +323,9 @@ class pascal_voc(imdb):
         print('--------------------------------------------------------------')
 
     def _do_matlab_eval(self, output_dir='output'):
-        print '-----------------------------------------------------'
-        print 'Computing results with the official MATLAB eval code.'
-        print '-----------------------------------------------------'
+        print ('-----------------------------------------------------')
+        print ('Computing results with the official MATLAB eval code.')
+        print ('-----------------------------------------------------')
         path = os.path.join(cfg.ROOT_DIR, 'lib', 'datasets',
                             'VOCdevkit-matlab-wrapper')
         cmd = 'cd {} && '.format(path)
@@ -358,8 +359,28 @@ class pascal_voc(imdb):
 
 
 if __name__ == '__main__':
-    d = pascal_voc('trainval', '2007')
-    res = d.roidb
-    from IPython import embed;
-
-    embed()
+    imdb = pascal_voc('train', '2012')
+    roidb = imdb.roidb #调用的是imdb类的方法
+    print(roidb[0])
+    # print("num_images:",imdb.num_images)
+    # print("img_path_at_i:",imdb.image_path_at(0))
+    # roidb = imdb._roidb_handler()
+    # print("len(roidb):",len(roidb))
+    # print("roidb[0]",roidb[0])
+    # print("gt_verlaps:",roidb[0]["gt_overlaps"])
+    # print("gt_classes:",roidb[0]["gt_classes"])
+    #roidb是一个列表，列表中每一个元素代表一张图片，且已被存储成一个字典。
+    # {'boxes': array([[52, 86, 470, 419],
+    #          [157, 43, 288, 166]], dtype=uint16),
+    # 'gt_classes': array([13, 15]), 'gt_ishard': array([0, 0]),
+    #  'gt_overlaps': < 2x21 sparse matrix of type '<class 'numpy.float32 '>'
+    # with 2 stored elements in Compressed Sparse Row format >,
+    # 'flipped': False, 'seg_areas': array([139946., 16368.],}                                                                                          dtype=float32)}
+    #
+    #格外注意 “gt_overlaps”,以稀疏矩阵，存储类别的标签。
+    #
+    # print(roidb)
+    # res = d.roidb
+    # from IPython import embed;
+    #
+    # embed()

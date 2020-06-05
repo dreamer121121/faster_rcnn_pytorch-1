@@ -58,8 +58,8 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     #layer_params = yaml.load(self.param_str_)
 
     """
-    _anchors = generate_anchors(scales=np.array(anchor_scales)) #生成9个anchor
-    _num_anchors = _anchors.shape[0]
+    _anchors = generate_anchors(scales=np.array(anchor_scales)) #生成9个anchor，是绝对坐标(xmin,ymin,xmax,ymax)且(xmin+xmax)/2 = 7.5,(ymin+ymax)/2 = 7.5
+    _num_anchors = _anchors.shape[0] #9
     # rpn_cls_prob_reshape = np.transpose(rpn_cls_prob_reshape,[0,3,1,2]) #-> (1 , 2xA, H , W)
     # rpn_bbox_pred = np.transpose(rpn_bbox_pred,[0,3,1,2])              # -> (1 , Ax4, H , W)
 
@@ -71,8 +71,8 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
         'Only single item batches are supported'
     # cfg_key = str(self.phase) # either 'TRAIN' or 'TEST'
     # cfg_key = 'TEST'
-    pre_nms_topN = cfg[cfg_key].RPN_PRE_NMS_TOP_N
-    post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
+    pre_nms_topN = cfg[cfg_key].RPN_PRE_NMS_TOP_N #12000
+    post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N #2000
     nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
     min_size = cfg[cfg_key].RPN_MIN_SIZE
 
@@ -87,7 +87,7 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
         print ('scale: {}'.format(im_info[2]))
 
     # 1. Generate proposals from bbox deltas and shifted anchors
-    height, width = scores.shape[-2:]
+    height, width = scores.shape[-2:]  #height=38,width=50
 
     if DEBUG:
         print ('score map size: {}'.format(scores.shape))
@@ -98,6 +98,9 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     shift_x, shift_y = np.meshgrid(shift_x, shift_y)
     shifts = np.vstack((shift_x.ravel(), shift_y.ravel(),
                         shift_x.ravel(), shift_y.ravel())).transpose()
+
+    #shifts.shape = [1900,4],1900=50*38,4表示xmin,ymin,xmax,ymax应当移动的距离
+    #shifts[0] = [0,0,0,0]
 
     # Enumerate all shifted anchors:
     #
@@ -110,6 +113,7 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     anchors = _anchors.reshape((1, A, 4)) + \
               shifts.reshape((1, K, 4)).transpose((1, 0, 2))
     anchors = anchors.reshape((K * A, 4))
+    #将原始的9个中心在（7.5,7.5）的全部坐标进行偏移得到全部的anchor，此时anchor仍是采用绝对坐标。
 
     # Transpose and reshape predicted bbox transformations to get them
     # into the same order as the anchors:
@@ -132,6 +136,7 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
 
     # 2. clip predicted boxes to image
     proposals = clip_boxes(proposals, im_info[:2])
+
 
     # 3. remove predicted boxes with either height or width < threshold
     # (NOTE: convert min_size to input image scale stored in im_info[2])
@@ -158,7 +163,7 @@ def proposal_layer(rpn_cls_prob_reshape, rpn_bbox_pred, im_info, cfg_key, _feat_
     keep = nms(np.hstack((proposals, scores)), nms_thresh)
     if post_nms_topN > 0:
         keep = keep[:post_nms_topN]
-    proposals = proposals[keep, :]
+    proposals = proposals[keep, :] #返回top 300
     scores = scores[keep]
     # Output rois blob
     # Our RPN implementation only supports a single input image, so all

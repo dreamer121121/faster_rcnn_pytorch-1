@@ -28,6 +28,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     """
     Assign anchors to ground-truth targets. Produces anchor classification
     labels and bounding-box regression targets.
+    #用于给anchor打标签！非常重要。
     Parameters
     ----------
     rpn_cls_score: for pytorch (1, Ax2, H, W) bg/fg scores of previous conv layer
@@ -107,12 +108,14 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     # cell K shifts (K, 1, 4) to get
     # shift anchors (K, A, 4)
     # reshape to (K*A, 4) shifted anchors
-    A = _num_anchors
-    K = shifts.shape[0]
+    A = _num_anchors #9
+    K = shifts.shape[0] #1900
     all_anchors = (_anchors.reshape((1, A, 4)) +
                    shifts.reshape((1, K, 4)).transpose((1, 0, 2)))
-    all_anchors = all_anchors.reshape((K * A, 4))
-    total_anchors = int(K * A)
+    all_anchors = all_anchors.reshape((K * A, 4)) #此时得到的anchor都是绝对坐标！！，all_anchors.shape = (17100,4)
+    print("all_anchors:",all_anchors.shape)
+    print("all_anchors[:9]",all_anchors)
+    total_anchors = int(K * A) #anchor的总数为1900*9 = 17100个
 
     # only keep anchors inside the image
     inds_inside = np.where(
@@ -120,32 +123,47 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
         (all_anchors[:, 1] >= -_allowed_border) &
         (all_anchors[:, 2] < im_info[1] + _allowed_border) &  # width
         (all_anchors[:, 3] < im_info[0] + _allowed_border)  # height
-    )[0]
+    )[0]  #返回在图像内的anchor的索引。
 
     if DEBUG:
         print ('total_anchors', total_anchors)
         print ('inds_inside', len(inds_inside))
 
     # keep only inside anchors
-    anchors = all_anchors[inds_inside, :]
+    anchors = all_anchors[inds_inside, :] #从全部的anchor中删掉落在外面anchor,得到剩下的anchor。
     if DEBUG:
         print ('anchors.shape', anchors.shape)
 
     # label: 1 is positive, 0 is negative, -1 is dont care
     # (A)
-    labels = np.empty((len(inds_inside),), dtype=np.float32)
+    labels = np.empty((len(inds_inside),), dtype=np.float32) #label数组的大小与inds_inside相同。
     labels.fill(-1)
 
     # overlaps between the anchors and the gt boxes
     # overlaps (ex, gt), shape is A x G
+    print("anchors.shape:",anchors.shape)
+    print("anchor",anchors[:9])
+    print("gt_boxes:",gt_boxes)
+
+    #bbox_overlaps函数用于计算每一个anchor与所有的gt_boxes的IOU，要能够自己写
+    #overlaps的形状为(num_anchors,num_gt_boxes)
+    #即每一个anchor与所有的groudn truth的IOU
     overlaps = bbox_overlaps(
         np.ascontiguousarray(anchors, dtype=np.float),
         np.ascontiguousarray(gt_boxes, dtype=np.float))
-    argmax_overlaps = overlaps.argmax(axis=1)  # (A)
+
+    argmax_overlaps = overlaps.argmax(axis=1)  # (A) 返回为[num_anchors,1],返回的是索引值
+    print("argmax.shape",argmax_overlaps.shape)
+    #取出在图片内部的每一个anchor的与它IOU最大的GT的IOU
     max_overlaps = overlaps[np.arange(len(inds_inside)), argmax_overlaps]
+    print("max_overlaps.shape",max_overlaps.shape)
+    print('max_overlaps:',max_overlaps)
+    #返回与每一个GT的IOU最大的anchor的索引
     gt_argmax_overlaps = overlaps.argmax(axis=0)  # G
+    #返回每一个GT与它IOU最大的anchor的IOU
     gt_max_overlaps = overlaps[gt_argmax_overlaps,
                                np.arange(overlaps.shape[1])]
+
     gt_argmax_overlaps = np.where(overlaps == gt_max_overlaps)[0]
 
     if not cfg.TRAIN.RPN_CLOBBER_POSITIVES:
@@ -153,6 +171,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
         labels[max_overlaps < cfg.TRAIN.RPN_NEGATIVE_OVERLAP] = 0
 
     # fg label: for each gt, anchor with highest overlap
+    #将GT
     labels[gt_argmax_overlaps] = 1
     # fg label: above threshold IOU
     labels[max_overlaps >= cfg.TRAIN.RPN_POSITIVE_OVERLAP] = 1
@@ -171,6 +190,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
         intersecs_ = intersecs.sum(axis=0)  # A x 1
         labels[intersecs_ > cfg.TRAIN.DONTCARE_AREA_INTERSECTION_HI] = -1
 
+    #排除hard samples GT是否是hard记录在数组gt_ishard中
     # preclude hard samples that are highly occlusioned, truncated or difficult to see
     if cfg.TRAIN.PRECLUDE_HARD_SAMPLES and gt_ishard is not None and gt_ishard.shape[0] > 0:
         assert gt_ishard.shape[0] == gt_boxes.shape[0]
@@ -186,7 +206,10 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
             max_intersec_label_inds = hard_overlaps.argmax(axis=1)  # H x 1
             labels[max_intersec_label_inds] = -1  #
 
+    #若positive labels太多，再一次采样positive labels
     # subsample positive labels if we have too many
+    #cfg.TRAIN.RPN_FG_FRACTION = 0.5
+    #cfg.TRAIN.RPN_BATCHSIZE = 256
     num_fg = int(cfg.TRAIN.RPN_FG_FRACTION * cfg.TRAIN.RPN_BATCHSIZE)
     fg_inds = np.where(labels == 1)[0]
     if len(fg_inds) > num_fg:
@@ -194,6 +217,7 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
             fg_inds, size=(len(fg_inds) - num_fg), replace=False)
         labels[disable_inds] = -1
 
+    #再一次下采样bg,如果背景anchor太多。
     # subsample negative labels if we have too many
     num_bg = cfg.TRAIN.RPN_BATCHSIZE - np.sum(labels == 1)
     bg_inds = np.where(labels == 0)[0]
@@ -234,10 +258,10 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
         _counts += np.sum(labels == 1)
         means = _sums / _counts
         stds = np.sqrt(_squared_sums / _counts - means ** 2)
-        print 'means:'
-        print means
-        print 'stdevs:'
-        print stds
+        print ('means:')
+        print (means)
+        print ('stdevs:')
+        print (stds)
 
     # map up to original set of anchors
     labels = _unmap(labels, total_anchors, inds_inside, fill=-1)
@@ -246,14 +270,14 @@ def anchor_target_layer(rpn_cls_score, gt_boxes, gt_ishard, dontcare_areas, im_i
     bbox_outside_weights = _unmap(bbox_outside_weights, total_anchors, inds_inside, fill=0)
 
     if DEBUG:
-        print 'rpn: max max_overlap', np.max(max_overlaps)
-        print 'rpn: num_positive', np.sum(labels == 1)
-        print 'rpn: num_negative', np.sum(labels == 0)
+        print ('rpn: max max_overlap', np.max(max_overlaps))
+        print ('rpn: num_positive', np.sum(labels == 1))
+        print ('rpn: num_negative', np.sum(labels == 0))
         _fg_sum += np.sum(labels == 1)
         _bg_sum += np.sum(labels == 0)
         _count += 1
-        print 'rpn: num_positive avg', _fg_sum / _count
-        print 'rpn: num_negative avg', _bg_sum / _count
+        print ('rpn: num_positive avg', _fg_sum / _count)
+        print ('rpn: num_negative avg', _bg_sum / _count)
 
     # labels
     # pdb.set_trace()
@@ -302,7 +326,7 @@ def _unmap(data, count, inds, fill=0):
 def _compute_targets(ex_rois, gt_rois):
     """Compute bounding-box regression targets for an image."""
 
-    assert ex_rois.shape[0] == gt_rois.shape[0]
+    assert ex_rois.shape[0] == gt_rois.shape[0] #一个anchor对应一个gt,所以两个数组的元素个数必然相同。
     assert ex_rois.shape[1] == 4
     assert gt_rois.shape[1] == 5
 
